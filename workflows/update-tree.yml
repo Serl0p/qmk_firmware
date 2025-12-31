@@ -3,6 +3,10 @@ name: Update project tree
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/**'
+      - 'README_TREE.md'    # avoid retriggering on the generated file
+  workflow_dispatch: {}     # allows manual run from Actions UI
 
 jobs:
   update-tree:
@@ -29,3 +33,4 @@ jobs:
           author_email: actions@github.com
           message: "Auto-update project tree"
           add: "README_TREE.md"
+
