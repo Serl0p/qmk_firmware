@@ -1,0 +1,34 @@
+name: Generate JSON Tree
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/**'
+      - 'tree.ndjson'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  json-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Make script executable
+        run: chmod +x ./scripts/tree-json.py
+
+      - name: Generate NDJSON tree
+        run: ./scripts/tree-json.py . > tree.ndjson
+
+      - name: Commit and push only if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tree.ndjson
+          git diff --cached --quiet || (git commit -m "Auto-update JSON tree" && git push)
