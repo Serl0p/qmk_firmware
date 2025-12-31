@@ -5,8 +5,11 @@ on:
     branches: [ main ]
     paths-ignore:
       - '.github/workflows/**'
-      - 'README_TREE.md'    # avoid retriggering on the generated file
-  workflow_dispatch: {}     # allows manual run from Actions UI
+      - 'README_TREE.md'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   update-tree:
@@ -20,16 +23,19 @@ jobs:
       - name: Install tree
         run: sudo apt-get update && sudo apt-get install -y tree
 
+      - name: List repo files
+        run: ls -la
+
       - name: Make script executable
-        run: chmod +x ./tree-md
+        run: chmod +x ./scripts/tree-md
 
       - name: Generate tree file
-        run: ./tree-md . > README_TREE.md
+        run: ./scripts/tree-md . > README_TREE.md
 
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          author_name: github-actions
-          author_email: actions@github.com
-          message: "Auto-update project tree"
-          add: "README_TREE.md"
+      - name: Commit and push only if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README_TREE.md
+          # If there are staged changes, commit and push; otherwise do nothing
+          git diff --cached --quiet || (git commit -m "Auto-update project tree" && git push)
