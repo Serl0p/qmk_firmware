@@ -1,0 +1,34 @@
+name: Convert NDJSON to Nested JSON
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/**'
+      - 'tree_nested.json'
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Make script executable
+        run: chmod +x ./scripts/ndjson_to_nested.py
+
+      - name: Convert NDJSON to nested JSON
+        run: ./scripts/ndjson_to_nested.py tree.ndjson > tree_nested.json
+
+      - name: Commit and push only if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tree_nested.json
+          git diff --cached --quiet || (git commit -m "Auto-update nested JSON tree" && git push)
