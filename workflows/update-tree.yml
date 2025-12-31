@@ -1,0 +1,31 @@
+name: Update project tree
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  update-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Install tree
+        run: sudo apt-get update && sudo apt-get install -y tree
+
+      - name: Make script executable
+        run: chmod +x ./tree-md
+
+      - name: Generate tree file
+        run: ./tree-md . > README_TREE.md
+
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: github-actions
+          author_email: actions@github.com
+          message: "Auto-update project tree"
+          add: "README_TREE.md"
