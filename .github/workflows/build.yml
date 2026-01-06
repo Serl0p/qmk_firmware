@@ -1,4 +1,4 @@
-name: Build QMK firmware
+name: Build P65 firmware
 
 on:
   workflow_dispatch:
@@ -6,8 +6,7 @@ on:
     paths:
       - "keyboards/epomaker/p65/**"
       - "lib/rdmctmzt_common/**"
-      - "lib/chibios-contrib/**"
-      - ".github/workflows/build.yml"
+      - ".github/workflows/build-p65.yml"
 
 jobs:
   build:
@@ -15,15 +14,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Install QMK deps
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install toolchain + QMK CLI
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip git make gcc-arm-none-eabi avr-libc dfu-util clang-format
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt || true
+          sudo apt-get install -y \
+            git make gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+            unzip zip
+          python -m pip install --upgrade pip
+          python -m pip install qmk
+          qmk --version
+          qmk hello
 
-      - name: Build P65 default
+      - name: Build
         run: |
           make epomaker/p65:default
 
@@ -32,8 +42,4 @@ jobs:
         with:
           name: p65-firmware
           path: |
-            *.bin
-            *.hex
-            *.uf2
-            *.elf
-            *.map
+            .build/*
