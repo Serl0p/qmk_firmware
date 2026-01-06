@@ -31,6 +31,11 @@ static uint32_t battery_wave_timer  = 0;
 bool hs_bat_req_flag = false;
 bool hs_fn_key_held  = false;
 
+// Track if status indicators forced LEDs on
+static bool    status_indicators_forced_leds = false;
+static bool    status_indicators_forced_rgb  = false;
+static uint8_t saved_rgb_val                 = 0;
+
 // Visual feedback blink timer
 static uint32_t kb_blink_timer = 0;
 
@@ -53,6 +58,7 @@ typedef union {
         uint8_t flag : 1; // used to make sure the eeprom has initialized at least once
         uint8_t current_dev : 3;
         uint8_t last_bt_dev : 3;
+        uint8_t last_wireless_dev : 3; // Save last wireless device (BT or 2.4G)
     };
 } confinfo_t;
 confinfo_t confinfo;
@@ -91,10 +97,16 @@ void keyboard_post_init_kb(void) {
 
     confinfo.raw = eeconfig_read_kb();
     if (!confinfo.raw) {
-        confinfo.flag        = true;
-        confinfo.last_bt_dev = 1;
+        confinfo.flag              = true;
+        confinfo.last_bt_dev       = 1;
+        confinfo.last_wireless_dev = 1; // Default to BT1
 
         eeconfig_init_user();
+        eeconfig_update_kb(confinfo.raw);
+    }
+    // Initialize last_wireless_dev if not set
+    if (confinfo.last_wireless_dev == 0) {
+        confinfo.last_wireless_dev = (confinfo.current_dev == DEVS_2G4) ? DEVS_2G4 : confinfo.last_bt_dev;
         eeconfig_update_kb(confinfo.raw);
     }
 
@@ -193,7 +205,7 @@ void wireless_post_task(void) {
         post_init_timer = 0x00;
     }
 
-    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
+    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev, confinfo.last_wireless_dev);
 }
 
 // i don't know what this does
@@ -206,31 +218,35 @@ static uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
 
     switch (keycode) {
         case KC_BT1: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT1 pairing when physical switch is in any wireless position
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 wireless_devs_change(wireless_get_current_devs(), DEVS_BT1, true);
             }
 
         } break;
         case KC_BT2: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT2 pairing when physical switch is in any wireless position
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 wireless_devs_change(wireless_get_current_devs(), DEVS_BT2, true);
             }
         } break;
         case KC_BT3: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT3 pairing when physical switch is in any wireless position
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 wireless_devs_change(wireless_get_current_devs(), DEVS_BT3, true);
             }
         } break;
         case KC_2G4: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow 2.4G pairing when physical switch is in any wireless position
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 wireless_devs_change(wireless_get_current_devs(), DEVS_2G4, true);
             }
         } break;
@@ -266,43 +282,48 @@ static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 
     switch (keycode) {
         case KC_BT1: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT1 when physical switch is in any wireless position (Mac or Windows)
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 WLS_KEYCODE_EXEC(DEVS_BT1);
                 hs_rgb_blink_set_timer(timer_read32());
             }
 
         } break;
         case KC_BT2: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT2 when physical switch is in any wireless position (Mac or Windows)
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 WLS_KEYCODE_EXEC(DEVS_BT2);
                 hs_rgb_blink_set_timer(timer_read32());
             }
         } break;
         case KC_BT3: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow BT3 when physical switch is in any wireless position (Mac or Windows)
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 WLS_KEYCODE_EXEC(DEVS_BT3);
                 hs_rgb_blink_set_timer(timer_read32());
             }
         } break;
         case KC_2G4: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow 2.4G when physical switch is in any wireless position (Mac or Windows)
+            if ((mode == hs_mac_wireless) || (mode == hs_win_wireless) || (mode == hs_wireless) || (mode == hs_none)) {
                 WLS_KEYCODE_EXEC(DEVS_2G4);
                 hs_rgb_blink_set_timer(timer_read32());
             }
         } break;
 
         case KC_USB: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
+            uint8_t mode = hs_none;
+            hs_modeio_detection(true, &mode, confinfo.last_bt_dev, confinfo.last_wireless_dev);
+            // Allow USB when physical switch is in USB position
+            if ((mode == hs_usb) || (mode == hs_none)) {
                 WLS_KEYCODE_EXEC(DEVS_USB);
                 hs_rgb_blink_set_timer(timer_read32());
             }
@@ -424,6 +445,38 @@ void housekeeping_task_kb(void) { // loop
     charging_state    = gpio_read_pin(HS_BAT_CABLE_PIN);
     battery_full_flag = gpio_read_pin(BAT_FULL_PIN);
 
+    // Manage LED power and RGB matrix for status indicators
+    // Enable LEDs when showing connection or battery status, even if RGB is off
+    bool status_indicators_active = hs_fn_key_held || hs_bat_req_flag;
+
+    if (status_indicators_active && !status_indicators_forced_leds) {
+        // Status indicators just became active
+        status_indicators_forced_leds = true;
+
+        // Save current RGB state and temporarily enable if needed
+        if (!rgb_matrix_is_enabled() || rgb_matrix_get_val() == 0) {
+            saved_rgb_val                = rgb_matrix_get_val();
+            status_indicators_forced_rgb = true;
+            rgb_matrix_enable_noeeprom();
+            if (rgb_matrix_get_val() == 0) {
+                rgb_matrix_sethsv_noeeprom(rgb_matrix_get_hue(), rgb_matrix_get_sat(), RGB_MATRIX_VAL_STEP);
+            }
+        }
+        gpio_write_pin_high(LED_POWER_EN_PIN);
+    } else if (!status_indicators_active && status_indicators_forced_leds) {
+        // Status indicators just became inactive - restore previous state
+        status_indicators_forced_leds = false;
+
+        if (status_indicators_forced_rgb) {
+            status_indicators_forced_rgb = false;
+            // Restore previous RGB state
+            if (saved_rgb_val == 0) {
+                rgb_matrix_sethsv_noeeprom(rgb_matrix_get_hue(), rgb_matrix_get_sat(), 0);
+                gpio_write_pin_low(LED_POWER_EN_PIN);
+            }
+        }
+    }
+
     if (!hs_current_time || timer_elapsed32(hs_current_time) > 1000) {
         uint8_t hs_now_mode;
         if (charging_state && battery_full_flag) {
@@ -524,6 +577,12 @@ void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset) {
     if (confinfo.current_dev != wireless_get_current_devs()) {
         confinfo.current_dev = wireless_get_current_devs();
         if (confinfo.current_dev > 0 && confinfo.current_dev < 4) confinfo.last_bt_dev = confinfo.current_dev;
+        // Save last wireless device (BT or 2.4G) for restoring when switching back to wireless
+        if (confinfo.current_dev >= DEVS_BT1 && confinfo.current_dev <= DEVS_BT3) {
+            confinfo.last_wireless_dev = confinfo.current_dev;
+        } else if (confinfo.current_dev == DEVS_2G4) {
+            confinfo.last_wireless_dev = DEVS_2G4;
+        }
         eeconfig_update_kb(confinfo.raw);
     }
 
@@ -568,6 +627,9 @@ static void rgb_matrix_wls_indicator(void) {
 #endif
 
 bool rgb_matrix_indicators_kb() {
+    // Force LEDs on for status indicators even if RGB is disabled
+    bool status_indicators_active = hs_fn_key_held || hs_bat_req_flag;
+
     // Visual feedback blink (white flash)
     if (kb_blink_timer) {
         if ((timer_elapsed32(kb_blink_timer) / 250) % 2 == 0) {
@@ -581,7 +643,11 @@ bool rgb_matrix_indicators_kb() {
         return false;
     }
 
-    if (!rgb_matrix_indicators_user()) {
+    // Let user indicators run first (but don't block status indicators)
+    bool user_result = rgb_matrix_indicators_user();
+
+    // Only respect user return value if we're not showing status indicators
+    if (!user_result && !status_indicators_active) {
         return false;
     }
 
@@ -592,7 +658,13 @@ bool rgb_matrix_indicators_kb() {
     rgb_matrix_wls_indicator();
 
     // Show current connection mode indicator when Fn is held
+    // This works even if RGB is off
     if (hs_fn_key_held) {
+        // Turn off all other LEDs when showing connection indicator (if RGB was forced on)
+        if (status_indicators_forced_rgb) {
+            rgb_matrix_set_color_all(0x00, 0x00, 0x00);
+        }
+
         uint8_t current_dev = wireless_get_current_devs();
         switch (current_dev) {
             case DEVS_USB:
@@ -614,7 +686,13 @@ bool rgb_matrix_indicators_kb() {
     }
 
     // Show battery status when HS_BATQ is held and NOT charging (wireless mode)
+    // This works even if RGB is off
     if (hs_bat_req_flag && !charging_state) {
+        // Turn off all other LEDs when showing battery indicator (if RGB was forced on)
+        if (status_indicators_forced_rgb) {
+            rgb_matrix_set_color_all(0x00, 0x00, 0x00);
+        }
+
         uint8_t battery_pct = *md_getp_bat();
 
         // Normal battery display with proportional LEDs and color thresholds
@@ -648,6 +726,11 @@ bool rgb_matrix_indicators_kb() {
     }
     // Show wave animation when HS_BATQ is held AND charging
     else if (hs_bat_req_flag && charging_state && !battery_full_flag) {
+        // Turn off all other LEDs when showing battery indicator (if RGB was forced on)
+        if (status_indicators_forced_rgb) {
+            rgb_matrix_set_color_all(0x00, 0x00, 0x00);
+        }
+
         if (timer_elapsed32(battery_wave_timer) > 30) {
             battery_wave_timer  = timer_read32();
             battery_wave_offset = (battery_wave_offset > 3) ? (battery_wave_offset - 3) : 127;
@@ -661,6 +744,11 @@ bool rgb_matrix_indicators_kb() {
     }
     // Show solid green when HS_BATQ is held AND fully charged
     else if (hs_bat_req_flag && charging_state && battery_full_flag) {
+        // Turn off all other LEDs when showing battery indicator (if RGB was forced on)
+        if (status_indicators_forced_rgb) {
+            rgb_matrix_set_color_all(0x00, 0x00, 0x00);
+        }
+
         for (uint8_t i = 0; i < 10; i++) {
             rgb_matrix_set_color(battery_led_indices[i], 0x00, RGB_MATRIX_BAT_VAL, 0x00);
         }
@@ -686,7 +774,7 @@ bool rgb_matrix_indicators_kb() {
 }
 
 void lpwr_wakeup_hook(void) {
-    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
+    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev, confinfo.last_wireless_dev);
 
     gpio_write_pin_high(LED_POWER_EN_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
