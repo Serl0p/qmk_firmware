@@ -1,5 +1,7 @@
-/* Copyright 2025 Epomaker
- * Copyright 2025 Epomaker <hhttps://github.com/Epomaker>
+/* Copyright 2025 Carlos Eduardo de Paula <carlosedp@gmail.com>
+ * Copyright 2025 EPOMAKER <https://github.com/Epomaker>
+ * Copyright 2023 LiWenLiu <https://github.com/LiuLiuQMK>
+ * Copyright 2021 QMK <https://github.com/qmk/qmk_firmware>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,18 +17,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../../../lib/rdr_lib/rdr_common.h"
+#include "keyboard_common.h"
 
-/**********************系统函数***************************/
-/*  键盘扫描按键延时 */
-void matrix_io_delay(void) {
-}
+// ===========================================================================
+// Keyboard-specific data
+// ===========================================================================
 
-void matrix_output_select_delay(void) {
-}
+// Battery indicator LED indices (first row)
+const uint8_t Led_Batt_Index_Tab[BATTERY_LED_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-void matrix_output_unselect_delay(uint8_t line, bool key_pressed) {
-}
+// ===========================================================================
+// LED Matrix Configuration (keyboard-specific)
+// ===========================================================================
+
 
 led_config_t g_led_config = { {
     { 0        , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   , NO_LED   },
@@ -49,47 +52,34 @@ led_config_t g_led_config = { {
     1,  1,  1,              1,              1,  1,      1,  1,  1
 } };
 
+// ===========================================================================
+// QMK Callback Functions - Delegate to common implementations
+// ===========================================================================
+
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    User_Point_Show();
-    return false;
+    return kb_rgb_matrix_indicators_common(led_min, led_max);
 }
 
-void notify_usb_device_state_change_user(enum usb_device_state usb_device_state)  {
-    if (Keyboard_Info.Key_Mode == QMK_USB_MODE) {
-        if(usb_device_state == USB_DEVICE_STATE_CONFIGURED) {
-            Usb_If_Ok = true;//usb枚举完成
-            Usb_If_Ok_Led = true;
-            Usb_If_Ok_Delay = 0;
-        } else {
-            Usb_If_Ok = false;
-		    Usb_If_Ok_Led = false;
-        }
-    } else {
-        Usb_If_Ok = false;
-	    Usb_If_Ok_Led = false;
-    }
+void notify_usb_device_state_change_user(struct usb_device_state usb_device_state) {
+    kb_notify_usb_device_state_change(usb_device_state);
+}
+
+bool led_update_user(led_t led_state) {
+    return kb_led_update(led_state);
 }
 
 void housekeeping_task_user(void) {
-    if(User_State_Fulfill_Flag){
-        User_Keyboard_Reset();
-        User_State_Fulfill_Flag = 0x00;
-    }
-
-    es_chibios_user_idle_loop_hook();
+    kb_housekeeping_task();
 }
 
 void board_init(void) {
-    User_Keyboard_Init();
+    kb_board_init();
 }
 
 void keyboard_post_init_user(void) {
-    User_Keyboard_Post_Init();
+    kb_keyboard_post_init();
 }
 
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {   /*键盘只要有按键按下就会调用此函数*/
-    Usb_Change_Mode_Delay = 0;                                      /*只要有按键就不会进入休眠*/
-    Usb_Change_Mode_Wakeup = false;
-
-    return Key_Value_Dispose(keycode, record);
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    return kb_process_record_common(keycode, record);
 }
