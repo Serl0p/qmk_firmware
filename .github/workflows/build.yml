@@ -1,0 +1,39 @@
+name: Build QMK firmware
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "keyboards/epomaker/p65/**"
+      - "lib/rdmctmzt_common/**"
+      - "lib/chibios-contrib/**"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install QMK deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip git make gcc-arm-none-eabi avr-libc dfu-util clang-format
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt || true
+
+      - name: Build P65 default
+        run: |
+          make epomaker/p65:default
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: p65-firmware
+          path: |
+            *.bin
+            *.hex
+            *.uf2
+            *.elf
+            *.map
